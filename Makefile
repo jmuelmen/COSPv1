@@ -2,49 +2,25 @@
 ########################################################################
 #              Adapt these variables to your environment
 ########################################################################
-# F90      = pgf90
-# F90FLAGS = -O0 -Mpreprocess
-# NCDF_INC = /opt/ukmo/utils/contrib/linux_only/include/pgf90
-# NCDF_LIB = /opt/ukmo/utils/contrib/linux_only/lib/pgf90
-#F90FLAGS = -C -Mchkfpstk -Mchkptr -Mchkstk
-
-
 F90      = ifort
-# F90FLAGS = -C -check -fpp
-F90FLAGS = -O0
-NCDF_INC = /project/ipcc/ar5/sw/oss/include
-NCDF_LIB = /project/ipcc/ar5/sw/oss/lib
-# NCDF_INC = /data/cr2/hadac/software/netcdf-3.6.3.ifort/include
-# NCDF_LIB = /data/cr2/hadac/software/netcdf-3.6.3.ifort/lib
-# F90FLAGS = -check all
+#F90FLAGS = -C -check -fpp
+#F90FLAGS = -check bounds
+#F90FLAGS = -pg
+F90FLAGS = -O2
+NCDF_INC = $(HOME)/netcdf-4.4.3-intel14/include
+NCDF_LIB = $(HOME)/netcdf-4.4.3-intel14/lib
 
-# F90      = f95
-# F90FLAGS = -O0 -dcfuns -mismatch -maxcontin=100 -C=all
-# NCDF_INC = /opt/ukmo/utils/contrib/linux_only/include/f95
-# NCDF_LIB = /opt/ukmo/utils/contrib/linux_only/lib/f95
-
-
-# ---------------   CMOR  ------------------
-# V1
-# CMOR_INC = /data/cr2/hadac/software/CMOR_V1.3/${F90}/include
-# CMOR_LIB = /data/cr2/hadac/software/CMOR_V1.3/${F90}/lib
-
-# V2
-CMOR_INC = /project/ipcc/ar5/sw/oss/cmor/current/include
-CMOR_LIB = /project/ipcc/ar5/sw/oss/cmor/current/lib
-# CMOR_INC = /data/cr2/hadac/software/CMOR-2.0rc8/include
-# CMOR_LIB = /data/cr2/hadac/software/CMOR-2.0rc8/lib
-# --------------------------------------------
-
+CMOR_INC = $(HOME)/cmor/include
+CMOR_LIB = $(HOME)/cmor/lib
 
 INC = /data/cr2/hadac/software/include
 LIB = /data/cr2/hadac/software/lib
 
-UDUNITS_LIB = /project/ipcc/ar5/sw/oss/lib
-UUID_INC = /project/ipcc/ar5/sw/oss/include
-UUID_LIB = /project/ipcc/ar5/sw/oss/lib
+UDUNITS_LIB = $(HOME)/udunits/lib
+UDUNITS_INC = $(HOME)/udunits/include
 
-#LD_LIBRARY_PATH=/project/ipcc/ar5/sw/oss/lib:/data/cr2/hadac/software/lib
+UUID_LIB = $(HOME)/uuid/lib
+UUID_INC = $(HOME)/uuid/include
 
 
 # Non-optional simulators. You should not need to change this
@@ -82,12 +58,11 @@ all: $(PROG)
 
 $(PROG): $(OBJS)
 	$(F90) $(F90FLAGS) $(PROG).F90 $(OBJS) \
-	-I$(NCDF_INC) -L${NCDF_LIB} -lnetcdff -lnetcdf \
-	-I$(INC) -L${LIB} -lsz \
-	-I$(CMOR_INC) -L${CMOR_LIB} -lcmor \
-	-I$(UUID_INC) -L${UUID_LIB} -luuid \
-	-L${UDUNITS_LIB} -ludunits2 -lexpat -o $(PROG)
-
+	-L${CMOR_LIB} -L. -lcmor -I$(CMOR_INC) \
+	-I$(NCDF_INC) -L${NCDF_LIB} -lnetcdff \
+	-L${UDUNITS_LIB} -Wl,-rpath=${UDUNITS_LIB} -ludunits2 -lexpat -I${UDUNITS_INC} \
+	-L${UUID_LIB} -Wl,-rpath=${UUID_LIB} -luuid -I$(UUID_INC) \
+	-o $(PROG)
 
 cmor1: $(OBJS)
 	$(F90) $(F90FLAGS) $(PROG).F90 $(OBJS) -I$(CMOR_INC) -L${CMOR_LIB} -lcmor \
@@ -137,7 +112,7 @@ zeff.o                    : math_lib.o optics_lib.o
 cosp_isccp_simulator.o    : cosp_constants.o cosp_types.o
 cosp_misr_simulator.o     : cosp_constants.o cosp_types.o
 cosp_modis_simulator.o    : cosp_constants.o cosp_types.o modis_simulator.o
-cosp_rttov_simulator.o    : cosp_constants.o cosp_types.o cosp_rttov.o
+cosp_rttov_simulator.o    : cosp_constants.o cosp_types.o
 
 clean_objs:
 	rm -f $(OBJS) *.mod *.o
