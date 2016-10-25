@@ -41,8 +41,8 @@ PROGRAM COSPTEST
 !   character(len=64)  :: cosp_output_nl='cfmip2/cosp_output_cfmip2_short_offline.txt'
   character(len=64)  :: cosp_output_nl='cosp_output_nl.txt'
   character(len=512) :: dinput ! Directory with input files
-  integer,parameter :: N_MAX_INPUT_FILES = 1000 ! Maximum number of input files
-  character(len=64),dimension(N_MAX_INPUT_FILES) :: finput ! File names
+  integer,parameter :: N_MAX_INPUT_FILES = 10000 ! Maximum number of input files
+  character(len=512),dimension(N_MAX_INPUT_FILES) :: finput ! File names
   character(len=600) :: dfinput ! Input file
   character(len=512) :: cmor_nl
   character(len=8)  :: wmode ! Writing mode 'replace' or 'append'
@@ -87,13 +87,14 @@ PROGRAM COSPTEST
   logical :: use_vgrid,csat_vgrid,use_precipitation_fluxes,use_reff
   double precision :: time,time_bnds(2),time_step
   real :: toffset_step,half_time_step
+  integer :: iday, ihour, imon
   namelist/COSP_INPUT/cmor_nl,overlap,isccp_topheight,isccp_topheight_direction, &
               npoints,npoints_it,ncolumns,nlevels,use_vgrid,nlr,csat_vgrid,dinput,finput, &
               radar_freq,surface_radar,use_mie_tables, &
               use_gas_abs,do_ray,melt_lay,k2,Nprmts_max_hydro,Naero,Nprmts_max_aero, &
               lidar_ice_type,use_precipitation_fluxes,use_reff, &
               platform,satellite,Instrument,Nchannels, &
-              Channels,Surfem,ZenAng,co2,ch4,n2o,co
+              Channels,Surfem,ZenAng,co2,ch4,n2o,co, wmode, iday, ihour, imon
 
   !---------------- End of declaration of variables --------------
    
@@ -137,9 +138,16 @@ PROGRAM COSPTEST
   call system_clock(t0,count_rate,count_max) !!! Only for testing purposes
   
   ! Example that processes ntsteps. It always uses the same input data
-  wmode = 'replace' ! Only for first iteration
-  time_step      = 3.D0/24.D0
-  time           = 8*1.D0/8.D0 ! First time step
+!!  wmode = 'replace' ! Only for first iteration
+  time_step      = 3.D0/24.D0 ! change also in suffix in cosp_io if needed
+  
+
+  siday = iday
+  simon = imon
+  sihour = ihour
+
+!cms  time           = dble(iday)-1.d0+dble(ihour)/24.D0
+  time           = dble(iday)-1.d0+dble(ihour)/24.D0 + 0.5*time_step ! First time step
   toffset_step   = time_step/Npoints
   half_time_step = 0.5*time_step
   do i=1,Nfiles
@@ -180,7 +188,8 @@ PROGRAM COSPTEST
         gbx%latitude = lat
         ! Toffset. This assumes that time is the mid-point of the interval.
         do k=1,Npoints
-          gbx%toffset(k) = -half_time_step + toffset_step*(k-0.5)
+          !cms gbx%toffset(k) = -half_time_step + toffset_step*(k-0.5)
+           gbx%toffset(k) = -half_time_step + toffset_step*(k-0.5)
         enddo
         gbx%p = p
         gbx%ph = ph
@@ -255,7 +264,7 @@ PROGRAM COSPTEST
         !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
         ! Write outputs to CMOR-compliant NetCDF
         !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-        if (i /= 1) wmode = 'append'
+    !!    if (i /= 1) wmode = 'append'
         gbx%time = time
         if (cfg%Lwrite_output) then
             print *, 'Writing outputs...'

@@ -64,6 +64,18 @@ MODULE MOD_COSP_IO
      integer :: dimssz(4)
      real,pointer,dimension(:,:,:) :: pntr
   END TYPE
+!yyy++
+   integer :: idd1
+   integer, parameter:: doun = 711
+
+!yyy--
+
+    CHARACTER (LEN=512)   :: SUFFIX
+    CHARACTER (LEN=512)   :: SUFFIX0
+    INTEGER :: siday, sihour, simon
+    CHARACTER (LEN = 2) :: amon, ahour, aday
+    CHARACTER (LEN = 1) :: arealization, ainitialization_method, aphysics_version
+
 CONTAINS
 
 !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -420,20 +432,23 @@ CONTAINS
     integer,optional :: verbosity
         
     !Local variables
-    integer :: Npoints,Nlevels,i,j,k
+    integer :: Npoints,Nlevels,i,j,k, l
     character(len=128) :: vname
-    integer,parameter :: NMAX_DIM=5
+    integer,parameter :: NMAX_DIM=10
     integer :: vrank,vdimid(NMAX_DIM)
     character(len=256) :: dimname(NMAX_DIM) ! 256 hardcoded, instead of MAXNCNAM. This works for NetCDF 3 and 4.
     integer :: ncid,vid,ndims,nvars,ngatts,recdim,dimsize(NMAX_DIM)
     integer :: errst
     logical :: Llat,Llon,Lpoint
     integer :: Na,Nb,Nc,Nd,Ne
+    integer :: Na_t,Nb_t,Nc_t,Nd_t 
     real,dimension(Npnts) :: ll
     integer,dimension(:),allocatable :: plon,plat
     real,allocatable :: x1(:),x2(:,:),x3(:,:,:),x4(:,:,:,:),x5(:,:,:,:,:) ! Temporary arrays
+    real,allocatable :: x2_t(:,:),x3_t(:,:,:),x4_t(:,:,:,:)
     character(len=64) :: routine_name='NC_READ_INPUT_FILE'
     character(len=128) :: errmsg,straux
+     integer :: istep
     
     mode = 0
     Nlon = 0
@@ -442,6 +457,17 @@ CONTAINS
     Npoints = Npnts
     Nlevels = Nl
     
+!cms++
+    istep=12
+
+     cca=0.
+     mr_ccliq=0.
+     mr_ccice=0.
+     fl_lsgrpl=0.
+     dtau_c=0.
+     dem_c=0.
+     Reff=0.
+!cms--
     ! Open file
     errst = nf90_open(fname, nf90_nowrite, ncid)
     if (errst /= 0) then
@@ -506,6 +532,7 @@ CONTAINS
         call cosp_error(routine_name,errmsg,errcode=errst)
     endif
     errst = nf90_get_var(ncid, vid, lon, start = (/1/), count = (/Nlon/))
+     lon=lon+180.
     if (errst /= 0) then
         errmsg="Error in nf90_get_var, var: lon"
         call cosp_error(routine_name,errmsg,errcode=errst)
@@ -525,6 +552,21 @@ CONTAINS
     do vid = 1,nvars
        vdimid=0
        errst = nf90_Inquire_Variable(ncid, vid, name=vname, ndims=vrank, dimids=vdimid)
+
+      IF (vname .eq. 'lsp' ) CYCLE 
+      IF (vname .eq. 'lidar_lowcloud' ) CYCLE 
+      IF (vname .eq. 'lidar_midcloud' ) CYCLE 
+      IF (vname .eq. 'lidar_highcloud' ) CYCLE
+      IF (vname .eq. 'lidar_totcloud' ) CYCLE 
+      IF (vname .eq. 'N_miss_lidar' ) CYCLE 
+      IF (LEN_TRIM(vname) .EQ. 9 ) THEN
+        IF (vname(1:7) .EQ. 'cldtype' ) CYCLE
+       END IF       
+       IF (LEN_TRIM(vname) .EQ. 12 ) THEN
+         IF (vname(1:11) .EQ. 'parasolRefl' ) CYCLE
+       END IF 
+
+
        if (errst /= 0) then
          write(straux, *)  vid
          errmsg='Error in nf90_Inquire_Variable, vid '//trim(straux)
@@ -538,10 +580,16 @@ CONTAINS
           errst = nf90_get_var(ncid, vid, x1, start=(/1/), count=(/Na/))
        endif
        if (vrank == 2) then
-          Na = dimsize(vdimid(1))
-          Nb = dimsize(vdimid(2))
+          Na_t = dimsize(vdimid(1))
+          Nb_t = dimsize(vdimid(2))
+!cms          allocate(x2(Na,Nb))
+          allocate(x2_t(Na_t,Nb_t))
+          errst = nf90_get_var(ncid, vid, x2_t, start=(/1,1/), count=(/Na_t,Nb_t/))
+          Na=Nb_t
+          Nb=Na_t
           allocate(x2(Na,Nb))
-          errst = nf90_get_var(ncid, vid, x2, start=(/1,1/), count=(/Na,Nb/))
+          x2=TRANSPOSE(x2_t)
+          x2(:,1:Nlevels) = x2(:,Nlevels:1:-1)
        endif
        if (vrank == 3) then
           Na = dimsize(vdimid(1))
@@ -549,6 +597,12 @@ CONTAINS
           Nc = dimsize(vdimid(3))
           allocate(x3(Na,Nb,Nc))
           errst = nf90_get_var(ncid, vid, x3, start=(/1,1,1/), count=(/Na,Nb,Nc/))
+
+          allocate(x2(Na,Nb))
+          x2=x3(:,:,istep)
+
+write(6,*) " Na, Nb ",Na, Nb 
+write(6,*) " Nlat, Nlon ", Nlat, Nlon
           if ((mode == 2).or.(mode == 3)) then
             if ((Na == Nlon).and.(Nb == Nlat)) then
               mode = 2
@@ -567,6 +621,22 @@ CONTAINS
           Nd = dimsize(vdimid(4))
           allocate(x4(Na,Nb,Nc,Nd))
           errst = nf90_get_var(ncid, vid, x4, start=(/1,1,1,1/), count=(/Na,Nb,Nc,Nd/))
+
+        IF (Nc .EQ. Nlevels) THEN
+         allocate(x3(Na,Nb,Nc))
+         x3(:,:,1:Nlevels)=x4(:,:,Nlevels:1:-1 ,istep)
+
+
+        ELSE IF (Nc .EQ. Nlevels+1) THEN
+        
+           allocate(x3(Na,Nb,Nc-1))
+            x3(:,:,1:Nlevels)=x4(:,:,Nlevels+1:2:-1 ,istep)
+        
+        END IF
+
+      write(6,*) size( x4,1 ), size( x4,2 ), size( x4,3 ), size( x4,4 )
+!stop    
+
        endif
        if (vrank == 5) then
           Na = dimsize(vdimid(1))
@@ -579,9 +649,13 @@ CONTAINS
        endif
        if (errst /= 0) then
           write(straux, *)  vid
-          errmsg='Error in nf90_get_var, vid '//trim(straux)
+          errmsg='Error in nf90_get_var, vid '//trim(straux)//" "//vname
           call cosp_error(routine_name,errmsg,errcode=errst)
        endif
+
+write(6,*) "reading ", TRIM(vname), vrank, "--", nlat, nlon, npoints
+
+!!write(6,*) " YYYY Nlat, Nlon ", Nlat, Nlon, " ", TRIM(vname), vrank
        ! Map to the right input argument
        select case (trim(vname))
        case ('pfull')
@@ -596,57 +670,86 @@ CONTAINS
          else
            call map_ll_to_point(Na,Nb,Npoints,x3=x3,y2=ph)
          endif
-       case ('height')
+!!$       case ('height')
+!!$         if (Lpoint) then
+!!$           z(1:Npoints,:) = x2(1:Npoints,1:Nlevels)
+!!$         else
+!!$           call map_ll_to_point(Na,Nb,Npoints,x3=x3,y2=z)
+!!$         endif
+!!$       case ('height_half')
+!!$         if (Lpoint) then
+!!$           zh(1:Npoints,:) = x2(1:Npoints,1:Nlevels)
+!!$         else
+!!$           call map_ll_to_point(Na,Nb,Npoints,x3=x3,y2=zh)
+!!$         endif
+       case ('geom', 'geom1')
          if (Lpoint) then
-           z(1:Npoints,:) = x2(1:Npoints,1:Nlevels)
+           z(1:Npoints,:) =  x2(1:Npoints,1:Nlevels)/9.81
+           
+!write(6,*) "  -- ",z(50,1:Nlevels)
+!write(6,*) "  -- ",x2(50,1:Nlevels)/9.81
+!stop
          else
+           x3=x3/9.81
            call map_ll_to_point(Na,Nb,Npoints,x3=x3,y2=z)
          endif
-       case ('height_half')
+       case ('geohm','geohm1')
          if (Lpoint) then
-           zh(1:Npoints,:) = x2(1:Npoints,1:Nlevels)
+           zh(1:Npoints,:) = x2(1:Npoints,1:Nlevels)/9.81
          else
+           x3=x3/9.81
            call map_ll_to_point(Na,Nb,Npoints,x3=x3,y2=zh)
          endif
-       case ('T_abs')
+       case ('T_abs', 'tm1_cosp' )
          if (Lpoint) then
            T(1:Npoints,:) = x2(1:Npoints,1:Nlevels)
          else
            call map_ll_to_point(Na,Nb,Npoints,x3=x3,y2=T)
          endif
-       case ('qv')
+!cms++ temporary
+         if (Lpoint) then
+          !! skt(1:Npoints) = x2(1:Npoints,Nlevels)
+            skt(1:Npoints) = x2(1:Npoints,1)
+         else
+        !!!   call map_ll_to_point(Na,Nb,Npoints,x2=x3(:,:,Nlevels),y1=skt)
+           call map_ll_to_point(Na,Nb,Npoints,x2=x3(:,:,1),y1=skt)
+         endif
+!cms--
+       case ('qv', 'q')
          if (Lpoint) then
            qv(1:Npoints,:) = x2(1:Npoints,1:Nlevels)
          else
+write(6,*) size(x4,1), size(x4,2),  size(x4,3), size(x4,4)
+write(6,*) size(qv,1), size(qv,2)
            call map_ll_to_point(Na,Nb,Npoints,x3=x3,y2=qv)
          endif
-       case ('rh')
+       case ('rh', 'relhum')
          if (Lpoint) then
            rh(1:Npoints,:) = x2(1:Npoints,1:Nlevels)
          else
            call map_ll_to_point(Na,Nb,Npoints,x3=x3,y2=rh)
          endif
-       case ('tca')
+       case ('tca', 'cosp_f3d')
          if (Lpoint) then
            tca(1:Npoints,:) = x2(1:Npoints,1:Nlevels)
          else
            call map_ll_to_point(Na,Nb,Npoints,x3=x3,y2=tca)
          endif
-         tca = tca
+         !!!tca = tca
        case ('cca')
          if (Lpoint) then
            cca(1:Npoints,:) = x2(1:Npoints,1:Nlevels)
          else
            call map_ll_to_point(Na,Nb,Npoints,x3=x3,y2=cca)
          endif
-         cca = cca
-       case ('mr_lsliq')
+         cca = cca 
+       case ('mr_lsliq','xl_cosp')
          if (Lpoint) then
            mr_lsliq(1:Npoints,:) = x2(1:Npoints,1:Nlevels)
          else
            call map_ll_to_point(Na,Nb,Npoints,x3=x3,y2=mr_lsliq)
          endif
-       case ('mr_lsice')
+       case ('mr_lsice','xi_cosp')
          if (Lpoint) then
            mr_lsice(1:Npoints,:) = x2(1:Npoints,1:Nlevels)
          else
@@ -694,7 +797,7 @@ CONTAINS
          else
            call map_ll_to_point(Na,Nb,Npoints,x3=x3,y2=fl_ccsnow)
          endif
-       case ('dtau_s')
+       case ('dtau_s', 'cisccp_tau3d')
          if (Lpoint) then
            dtau_s(1:Npoints,:) = x2(1:Npoints,1:Nlevels)
          else
@@ -706,7 +809,7 @@ CONTAINS
          else
            call map_ll_to_point(Na,Nb,Npoints,x3=x3,y2=dtau_c)
          endif
-       case ('dem_s')
+       case ('dem_s', 'cisccp_emi3d')
          if (Lpoint) then
            dem_s(1:Npoints,:) = x2(1:Npoints,1:Nlevels)
          else
@@ -718,49 +821,79 @@ CONTAINS
          else
            call map_ll_to_point(Na,Nb,Npoints,x3=x3,y2=dem_c)
          endif
-       case ('Reff')
+!!$       case ('Reff')
+!!$         if (Lpoint) then
+!!$           Reff(1:Npoints,:,:) = x3(1:Npoints,1:Nlevels,:)
+!!$         else
+!!$           call map_ll_to_point(Na,Nb,Npoints,x4=x4,y3=Reff)
+!!$         endif
+        case ('Reffl', 'reffl')
          if (Lpoint) then
-           Reff(1:Npoints,:,:) = x3(1:Npoints,1:Nlevels,:)
+           Reff(1:Npoints,:,I_LSCLIQ) = x2(1:Npoints,1:Nlevels)
+           
          else
-           call map_ll_to_point(Na,Nb,Npoints,x4=x4,y3=Reff)
+
+            call map_ll_to_point(Na,Nb,Npoints,x3=x3,y2=Reff(:,:,I_LSCLIQ))
+            
+
+           !! call map_ll_to_point(Na,Nb,Npoints,x4=x4,y3=Reff)
          endif
-       case ('skt')
+        case ('Reffi','reffi')
          if (Lpoint) then
-           skt(1:Npoints) = x1(1:Npoints)
+           Reff(1:Npoints,:,I_LSCICE) = x2(1:Npoints,1:Nlevels)
+          
          else
-           call map_ll_to_point(Na,Nb,Npoints,x2=x2,y1=skt)
+           !! call map_ll_to_point(Na,Nb,Npoints,x4=x4,y3=Reff)
+          call map_ll_to_point(Na,Nb,Npoints,x3=x3,y2=Reff(:,:,I_LSCICE))
          endif
-       case ('landmask')
+! skt: see above
+!!$       case ('skt')
+!!$         if (Lpoint) then
+!!$           skt(1:Npoints) = x1(1:Npoints)
+!!$         else
+!!$           call map_ll_to_point(Na,Nb,Npoints,x2=x2,y1=skt)
+!!$         endif
+       case ('landmask', 'slm')
          if (Lpoint) then
            landmask(1:Npoints) = x1(1:Npoints)
          else
            call map_ll_to_point(Na,Nb,Npoints,x2=x2,y1=landmask)
          endif
-       case ('orography')
+!!$       case ('orography')
+!!$         if (Lpoint) then
+!!$           sfc_height(1:Npoints) = x1(1:Npoints)
+!!$         else
+!!$           call map_ll_to_point(Na,Nb,Npoints,x2=x2,y1=sfc_height)
+!!$         endif
+       case ('geosp')
          if (Lpoint) then
-           sfc_height(1:Npoints) = x1(1:Npoints)
+           sfc_height(1:Npoints) = x1(1:Npoints)/9.81
          else
+!!           write(6,*) size(x3,1), size(x3,2),size(x3,3)
+
+           x2=x2/9.81
            call map_ll_to_point(Na,Nb,Npoints,x2=x2,y1=sfc_height)
          endif
-       case ('mr_ozone')
+       case ('mr_ozone', 'ao3')
+ ! vmr? mmr? check later, not needed for cfmip
          if (Lpoint) then
            mr_ozone(1:Npoints,:) = x2(1:Npoints,1:Nlevels)
          else
            call map_ll_to_point(Na,Nb,Npoints,x3=x3,y2=mr_ozone)
          endif
-       case ('u_wind')
+       case ('u_wind', 'u10')
          if (Lpoint) then
            u_wind(1:Npoints) = x1(1:Npoints)
          else
            call map_ll_to_point(Na,Nb,Npoints,x2=x2,y1=u_wind)
          endif
-       case ('v_wind')
+       case ('v_wind', 'v10')
          if (Lpoint) then
            v_wind(1:Npoints) = x1(1:Npoints)
          else
            call map_ll_to_point(Na,Nb,Npoints,x2=x2,y1=v_wind)
          endif
-       case ('sunlit')
+       case ('sunlit','cosp_sunlit')
          if (Lpoint) then
            sunlit(1:Npoints) = x1(1:Npoints)
          else
@@ -953,22 +1086,38 @@ CONTAINS
 !        end select
        ! Free memory
        if (vrank == 1) deallocate(x1)
-       if (vrank == 2) deallocate(x2)
-       if (vrank == 3) deallocate(x3)
-       if (vrank == 4) deallocate(x4)
+       if (vrank == 2) then
+        deallocate(x2)
+        deallocate(x2_t)
+       end if
+       if (vrank == 3) then
+        deallocate(x3)
+        deallocate(x2)
+       end if
+       if (vrank == 4) then
+        deallocate(x4)
+        deallocate(x3)
+       end if
        if (vrank == 5) deallocate(x5)
     enddo
        
     ! SFC emissivity
     errst = nf90_inq_varid(ncid, 'emsfc_lw', vid)
     if (errst /= 0) then
-        errmsg='Error in nf90_inq_varid, var: emsfc_lw'
-        call cosp_error(routine_name,errmsg,errcode=errst)
-    endif
-    errst = nf90_get_var(ncid, vid, emsfc_lw)
-    if (errst /= 0) then
-        errmsg='Error in nf90_get_var, var: emsfc_lw'
-        call cosp_error(routine_name,errmsg,errcode=errst)
+        if (errst == nf90_enotvar) then ! Does not exist, use 1.0
+            !!!emsfc_lw = 1.0
+            emsfc_lw =0.996
+            print *, ' ********* COSP Warning:  emsfc_lw does not exist in input file. Set to 0.996' !!1.0.'
+        else  ! Other error, stop
+            errmsg='Error in nf90_inq_varid, var: emsfc_lw'
+            call cosp_error(routine_name,errmsg,errcode=errst)
+        endif
+    else
+        errst = nf90_get_var(ncid, vid, emsfc_lw)
+        if (errst /= 0) then
+            errmsg='Error in nf90_get_var, var: emsfc_lw'
+            call cosp_error(routine_name,errmsg,errcode=errst)
+        endif
     endif
 
     
@@ -1000,7 +1149,7 @@ CONTAINS
       lat(1:Npoints) = lat(plat(1:Npoints))
     endif
     deallocate(plon,plat)
-    
+write(6,*) "close inp file"   
     ! Close file
     errst = nf90_close(ncid)
     if (errst /= 0) then
@@ -1008,6 +1157,46 @@ CONTAINS
         call cosp_error(routine_name,errmsg,errcode=errst)
     endif
 
+!yyy++
+!!$  do  i=1,Npoints
+!!$    if (lon(i) .ge.  111. .AND. lon(i) .LE. 113. ) THEN
+!!$     if (lat(i) .ge.  -84. .AND. lat(i) .LE. -82. ) THEN
+!!$      idd1=i
+!!$     end if
+!!$    end if   
+!!$ end do
+!!$
+!!$   open(doun, file="debug.out")
+!!$  write(doun,* ) "lon,lat ",lon(idd1),lat(idd1), "  ",idd1
+!!$write(doun,* ) "T ",T(idd1,6)
+!!$   flush (doun)
+
+    
+    
+
+!yyy--
+!cms++
+  Reff = 1.e-6* Reff
+
+  do k=1,nlevels
+    do i=1,Npoints
+    ! avoid neg. over ocean
+     if ( landmask(i) .GT. 0. .OR. sfc_height(i) .GT. 0.) then
+       z(i,k) =  z(i,k) + sfc_height(i)
+       zh(i,k) =  zh(i,k) + sfc_height(i)
+     end  if
+    end do
+  end do
+ !if (Lpoint) then
+ !  do k=1,nlevels
+ !   mr_lsliq(1:Npoints,k) = mr_lsliq(1:Npoints,k)/tca(1:Npoints,k)
+ !   mr_lsice(1:Npoints,k) = mr_lsice(1:Npoints,k)/tca(1:Npoints,k)
+ !  end do
+! end if
+
+!cms--
+   write(6,*) "out NC_READ_INPUT_FILE"
+!stop
   END SUBROUTINE NC_READ_INPUT_FILE
 
 !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1048,12 +1237,14 @@ CONTAINS
    character(len=512) :: inpath,outpath,start_date,model_id,experiment_id,institution,institute_id,source,calendar, &
                  contact,history,comment,table,parent_experiment_id,parent_experiment_rip,forcing
    character(len=2056) :: references
+   character(len=512) opath
    double precision :: branch_time
    integer :: initialization_method,physics_version
    integer :: realization,Npoints,Ncolumns,Nlevels,Nlvgrid,maxtsteps,Nchannels
+   integer :: ntimes_passed
    namelist/CMOR/inpath,outpath,start_date,model_id,experiment_id,branch_time,parent_experiment_id,parent_experiment_rip, &
               forcing,institution,institute_id,source,calendar,realization,initialization_method,physics_version, &
-              contact,history,comment,references,table,maxtsteps
+              contact,history,comment,references,table,maxtsteps,ntimes_passed, opath
    real,dimension(:),allocatable :: profile_ax,column_ax,dbze_ax,channel_ax
    real,dimension(:,:),allocatable :: dbze_bounds,vgrid_bounds,mgrid_bounds,sratio_bounds
    integer :: profile_axid,column_axid,height_axid,dbze_axid,height_mlev_axid,sratio_axid, &
@@ -1131,6 +1322,38 @@ CONTAINS
    open(10,file=cmor_nl,status='old')
    read(10,nml=cmor)
    close(10)
+
+
+!!$      WRITE(arealization,'(I1)') realization
+!!$      WRITE(ainitialization_method,'(I1)')  initialization_method
+!!$      WRITE(aphysics_version,'(I1)') physics_version
+!!$      SUFFIX0 =  'r'//TRIM(arealization)//'i'//TRIM(ainitialization_method)//'p'//TRIM(aphysics_version)
+!!$      SUFFIX0 = '_cf3hr_'//TRIM(model_id)//'_'//TRIM(experiment_id)//'_'//TRIM(SUFFIX0)
+!!$
+!!$      WRITE(amon,'(I2.2)') simon
+!!$      WRITE(aday,'(I2.2)') siday
+!!$      
+!!$      IF ( sihour -2 .GT. 0 ) THEN ! don't have to worry about first step here bec. of wmode   
+!!$       WRITE(ahour,'(I2.2)') sihour-2
+!!$      ELSE
+!!$       WRITE(ahour,'(I2.2)') sihour+24-2
+!!$       IF ( siday-1 .GT. 0 ) THEN
+!!$         WRITE(aday,'(I2.2)') siday-1
+!!$       ELSE
+!!$         WRITE(aday,'(I2.2)') 1
+!!$         WRITE(amon,'(I2.2)') simon-1
+!!$       END IF
+!!$      END If
+!!$
+!!$
+!!$      SUFFIX0 = TRIM(SUFFIX0)//'_'//'2008'//amon//'010130'
+!!$      SUFFIX0 = TRIM(SUFFIX0)//'-'//'2008'//amon//aday//ahour//'30'
+!!$      SUFFIX0 = TRIM(SUFFIX0)//'.nc'
+      !write(6,*) "=========================="
+      !write(6,*) suffix0
+      !write(6,*) "=========================="
+
+
 
    !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
    ! Specify path for tables and set up other CMOR options
@@ -1347,21 +1570,35 @@ CONTAINS
    !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
    ! 1D variables
    do i=1,n1d
+!!$      IF ( wmode .EQ. "replace" ) THEN
+!!$        SUFFIX=""
+!!$      ELSE 
+!!$        SUFFIX = TRIM(opath)//'/'//TRIM(v1d(i)%name)//SUFFIX0 
+!!$        write(6,*) "=========================="
+!!$        write(6,*) TRIM(suffix)
+!!$        write(6,*) "=========================="
+!!$      END IF
+ SUFFIX=""
+
+     !!  END IF 
       if (lout1d(i)) then
         error_flag = cmor_write(var_id=var1d_id(i), data=v1d(i)%pntr, &
-                           ntimes_passed=1,time_vals=(/gb%time/),time_bnds=tbnds)
+                           ntimes_passed=ntimes_passed,time_vals=(/gb%time/),time_bnds=tbnds, &
+                           file_suffix   = SUFFIX )
         if (error_flag < 0) then
            print *,  trim(pro_name)//': Error writing '//trim(v1d(i)%name)
            stop
         endif
         error_flag = cmor_write(var_id=lonvar_id, data=gb%longitude,store_with=var1d_id(i), &
-                           ntimes_passed=1,time_vals=(/gb%time/))
+                           ntimes_passed=ntimes_passed,time_vals=(/gb%time/), &
+                           file_suffix   = SUFFIX )
         if (error_flag < 0) then
            print *,  trim(pro_name)//': Error writing lon for '//trim(v1d(i)%name)
            stop
         endif
         error_flag = cmor_write(var_id=latvar_id, data=gb%latitude,store_with=var1d_id(i), &
-                           ntimes_passed=1,time_vals=(/gb%time/))
+                           ntimes_passed=ntimes_passed,time_vals=(/gb%time/), &
+                           file_suffix   = SUFFIX )
         if (error_flag < 0) then
            print *,  trim(pro_name)//': Error writing lat for '//trim(v1d(i)%name)
            stop
@@ -1372,19 +1609,22 @@ CONTAINS
    do i=1,n2d
       if (lout2d(i)) then
         error_flag = cmor_write(var_id=var2d_id(i), data=v2d(i)%pntr, &
-                           ntimes_passed=1,time_vals=(/gb%time/),time_bnds=tbnds)
+                           ntimes_passed=ntimes_passed,time_vals=(/gb%time/),time_bnds=tbnds, &
+                           file_suffix   = SUFFIX )
         if (error_flag < 0) then
            print *,  trim(pro_name)//': Error writing '//trim(v2d(i)%name)
            stop
         endif
         error_flag = cmor_write(var_id=lonvar_id, data=gb%longitude,store_with=var2d_id(i), &
-                           ntimes_passed=1,time_vals=(/gb%time/))
+                           ntimes_passed=ntimes_passed,time_vals=(/gb%time/), &
+                           file_suffix   = SUFFIX )
         if (error_flag < 0) then
            print *,  trim(pro_name)//': Error writing lon for '//trim(v2d(i)%name)
            stop
         endif
         error_flag = cmor_write(var_id=latvar_id, data=gb%latitude,store_with=var2d_id(i), &
-                           ntimes_passed=1,time_vals=(/gb%time/))
+                           ntimes_passed=ntimes_passed,time_vals=(/gb%time/), &
+                           file_suffix   = SUFFIX )
         if (error_flag < 0) then
            print *,  trim(pro_name)//': Error writing lat for '//trim(v2d(i)%name)
            stop
@@ -1395,19 +1635,22 @@ CONTAINS
    do i=1,n3d
       if (lout3d(i)) then
         error_flag = cmor_write(var_id=var3d_id(i), data=v3d(i)%pntr, &
-                           ntimes_passed=1,time_vals=(/gb%time/),time_bnds=tbnds)
+                           ntimes_passed=ntimes_passed,time_vals=(/gb%time/),time_bnds=tbnds, &
+                           file_suffix   = SUFFIX )
         if (error_flag < 0) then
            print *,  trim(pro_name)//': Error writing '//trim(v3d(i)%name)
            stop
         endif
         error_flag = cmor_write(var_id=lonvar_id, data=gb%longitude,store_with=var3d_id(i), &
-                           ntimes_passed=1,time_vals=(/gb%time/))
+                           ntimes_passed=ntimes_passed,time_vals=(/gb%time/), &
+                           file_suffix   = SUFFIX )
         if (error_flag < 0) then
            print *,  trim(pro_name)//': Error writing lon for '//trim(v3d(i)%name)
            stop
         endif
         error_flag = cmor_write(var_id=latvar_id, data=gb%latitude,store_with=var3d_id(i), &
-                           ntimes_passed=1,time_vals=(/gb%time/))
+                           ntimes_passed=ntimes_passed,time_vals=(/gb%time/),  &
+                           file_suffix   = SUFFIX )
         if (error_flag < 0) then
            print *,  trim(pro_name)//': Error writing lat for '//trim(v3d(i)%name)
            stop
@@ -1470,11 +1713,13 @@ CONTAINS
    character(len=512) :: inpath,outpath,start_date,model_id,experiment_id,institution,institute_id,source,calendar, &
                  contact,history,comment,table,parent_experiment_id,parent_experiment_rip,forcing
    character(len=2056) :: references
+   character(len=512) opath
    integer :: realization, nc_action,initialization_method,physics_version
    double precision :: branch_time
+   integer :: ntimes_passed
    namelist/CMOR/inpath,outpath,start_date,model_id,experiment_id,branch_time,parent_experiment_id,parent_experiment_rip, &
               forcing,institution,institute_id,source,calendar,realization,initialization_method,physics_version, &
-              contact,history,comment,references,table,maxtsteps
+              contact,history,comment,references,table,maxtsteps, ntimes_passed, opath
    real,dimension(:),allocatable :: column_ax,dbze_ax,channel_ax
    real,dimension(:,:),allocatable :: dbze_bounds,vgrid_bounds,sratio_bounds, &
                                       lon_bounds,lat_bounds,mgrid_bounds
@@ -1772,7 +2017,7 @@ CONTAINS
         allocate(y2(v1d(i)%dimssz(1),v1d(i)%dimssz(2)))
         call map_point_to_ll(Nlon,Nlat,geomode,x1=v1d(i)%pntr,y2=y2) ! Regridding
         error_flag = cmor_write(var_id=var1d_id(i), data=y2, &
-                           ntimes_passed=1,time_vals=(/gb%time/),time_bnds=tbnds)
+                           ntimes_passed=ntimes_passed,time_vals=(/gb%time/),time_bnds=tbnds)
         if (error_flag < 0) then
            print *,  trim(pro_name)//': Error writing '//trim(v1d(i)%name)
            stop
@@ -1786,7 +2031,7 @@ CONTAINS
         allocate(y3(v2d(i)%dimssz(1),v2d(i)%dimssz(2),v2d(i)%dimssz(3)))
         call map_point_to_ll(Nlon,Nlat,geomode,x2=v2d(i)%pntr,y3=y3) ! Regridding
         error_flag = cmor_write(var_id=var2d_id(i), data=y3, &
-                           ntimes_passed=1,time_vals=(/gb%time/),time_bnds=tbnds)
+                           ntimes_passed=ntimes_passed,time_vals=(/gb%time/),time_bnds=tbnds)
         if (error_flag < 0) then
            print *,  trim(pro_name)//': Error writing '//trim(v2d(i)%name)
            stop
@@ -1800,7 +2045,7 @@ CONTAINS
         allocate(y4(v3d(i)%dimssz(1),v3d(i)%dimssz(2),v3d(i)%dimssz(3),v3d(i)%dimssz(4)))
         call map_point_to_ll(Nlon,Nlat,geomode,x3=v3d(i)%pntr,y4=y4) ! Regridding
         error_flag = cmor_write(var_id=var3d_id(i), data=y4, &
-                           ntimes_passed=1,time_vals=(/gb%time/),time_bnds=tbnds)
+                           ntimes_passed=ntimes_passed,time_vals=(/gb%time/),time_bnds=tbnds)
         if (error_flag < 0) then
            print *,  trim(pro_name)//': Error writing '//trim(v3d(i)%name)
            stop
