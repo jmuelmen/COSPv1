@@ -3,7 +3,7 @@
 #set -e
 set -e #-x
 
-cosppath=/projekt4/climate/jkretzs/COSPv1-1.3.2
+cosppath=$PWD
 cosp=$cosppath/cosp_test
 prep_offl=$cosppath/prep_offl.ksh
 
@@ -56,7 +56,7 @@ fi
 
 cd $outpath/run
 
-set -A ifiles $oppath/cf3hr_2009-01${mon}*
+set -A ifiles $oppath/cf3hr_2009-${mon}*
 
 
 #tfile=temp01.nc
@@ -265,7 +265,7 @@ cat -> cmor/cosp_cmor_nl.txt << EOF
 EOF
 
 # run it
-$cosp
+env LD_LIBRARY_PATH=${HOME}/netcdf-4.4.3-intel14/lib $cosp
 
 
 

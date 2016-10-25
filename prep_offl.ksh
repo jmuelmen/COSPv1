@@ -27,7 +27,7 @@ fi
 
 
 for ifile in ${ifiles[*]}; do
-./pp  <<EOF
+env LD_LIBRARY_PATH=${HOME}/netcdf-4.4.3-intel14/lib ./pp  <<EOF
 &ppctl
 ifile="$ifile"
 opath="$oppath"
