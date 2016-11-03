@@ -2603,3 +2603,19 @@ type:              real
 !----------------------------------
 !
 
+!
+!============
+variable_entry: dbze94
+!============
+!
+! Variable attributes:
+!----------------------------------	
+standard_name: equivalent_reflectivity_factor
+units:         1
+long_name:     CloudSat Radar Reflectivity
+!----------------------------------	
+!
+! Additional variable information:
+!----------------------------------	
+dimensions:       location column alevel time1
+!----------------------------------	
