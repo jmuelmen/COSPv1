@@ -8,24 +8,30 @@ cosp=$cosppath/cosp_test
 prep_offl=$cosppath/prep_offl.ksh
 
 
-expid="amip"
+expid="rain_4_1_-3"
+out_expid="amip"
 
-mon=01
+year=2008
+mon=04
 
 #exp=simT63_12008_r2443offl/
 #ipath=/work/bm0671/m300111/OUT/echam-dev-mns/$exp
 
-ipath=$cosppath
-outpath=$cosppath/out
+ipath=${SCRATCH}/${expid}
+outpath=$ipath/cospOffl_output
+oppath=$ipath/cospOffl_input
 
 if [[ ! -e $outpath ]]; then
-mkdir -p $outpath
+    mkdir -p $outpath
+fi
+
+if [[ ! -e $oppath ]]; then
+    mkdir -p $oppath
 fi
 
 
 # prepare ########################
-set -A ifiles $ipath/echam6-ham_run.barat_T31_cospoff_1_test_200901.0*nc
-oppath=$ipath/cospOffl_input
+set -A ifiles $ipath/${expid}_*_cfOff.nc
 echo $oppath
 
 echo ${ifiles[*]}
@@ -39,24 +45,18 @@ wmode="replace"
 ntim=1
 
 
-if [[ ! -d $outpath ]]; then
- mkdir $outpath
+if [[ ! -e $outpath/run/cmor ]]; then
+    mkdir -p $outpath/run/cmor
 fi
-if [[ ! -d $outpath/run ]]; then
- mkdir $outpath/run
-fi
-if [[ ! -d $outpath/run/cmor ]]; then
- mkdir $outpath/run/cmor
-fi
-table=CMIP5_cf3hr
-#table=COSP_table_1D
-if [[ ! -e $outpath/run/cmor/$table ]]; then
+#table=CMIP5_cf3hr
+table=COSP_table_1D
+#if [[ ! -e $outpath/run/cmor/$table ]]; then
 cp $cosppath/cmor/$table $outpath/run/cmor
-fi
+#fi
 
 cd $outpath/run
 
-set -A ifiles $oppath/cf3hr_2009-${mon}*
+set -A ifiles $oppath/cf3hr_${year}-${mon}*
 
 
 #tfile=temp01.nc
@@ -241,7 +241,7 @@ cat -> cmor/cosp_cmor_nl.txt << EOF
   OUTPATH = '$outpath',
   START_DATE = '2008-${mon}-01',
   MODEL_ID = 'MPI-ESM-LR',
-  EXPERIMENT_ID = '$expid',
+  EXPERIMENT_ID = '$out_expid',
   BRANCH_TIME=0.,
   PARENT_EXPERIMENT_ID='N/A',
   PARENT_EXPERIMENT_RIP='N/A',
