@@ -6,7 +6,7 @@ F90      = ifort
 #F90FLAGS = -C -check -fpp
 #F90FLAGS = -check bounds
 #F90FLAGS = -pg
-F90FLAGS = -O2
+F90FLAGS = -O0 -g
 NCDF_INC = $(HOME)/netcdf-4.4.3-intel14/include
 NCDF_LIB = $(HOME)/netcdf-4.4.3-intel14/lib
 
