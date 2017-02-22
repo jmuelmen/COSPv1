@@ -75,8 +75,7 @@ hour=${filename:17:2}
 echo $mon $day $hour
 
 n=`ncks -m $fi | grep -in "Reffi dimension 0" | awk '{print $7}'| sed "s/,//"`
-
-
+nlev=`ncks -m $fi | grep -in "Reffi dimension 1" | awk '{print $7}'| sed "s/,//"`
 
 cat -> cosp_input_nl.txt << EOF
 ! original copyright: see cosp_input_nl.txt.org 
@@ -86,7 +85,7 @@ cat -> cosp_input_nl.txt << EOF
   NPOINTS=$n,! Number of gridpoints 153,27840,7081
   NPOINTS_IT=$n,! Max number of gridpoints to be processed in one iteration
   NCOLUMNS=20,  ! Number of subcolumns
-  NLEVELS=19,   ! Number of model levels
+  NLEVELS=$nlev,   ! Number of model levels
   USE_VGRID=.true., ! Use fixed vertical grid for outputs? (if .true. then you need to define number of levels with Nlr)
   NLR=40,       ! Number of levels in statistical outputs (only used if USE_VGRID=.true.)
   CSAT_VGRID=.true., ! CloudSat vertical grid? (if .true. then the CloudSat standard grid is used for the outputs.
@@ -209,7 +208,7 @@ cat -> cosp_output_nl.txt << EOF
   Lclcalipso2=.true.,
   Lcltlidarradar=.false.,
   !- These are provided for debugging or special purposes
-  Lfracout=.false.,
+  Lfracout=.true.,
   LlidarBetaMol532=.false.,  
   !- MODIS
   Lcltmodis=.true.,
